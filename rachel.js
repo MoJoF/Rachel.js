@@ -10,11 +10,6 @@ function Rachel() {
     return ["Rachel wishes you a nice day and happy coding."]
 }
 
-// Обидное сообщение от Рэйчел
-Rachel.sad = () => {
-    console.warn("%cYou didn't say hello to Rachel and she got mad at you :-(", "color: red; font-weight: bold")
-}
-
 // Обязательное приветствие для Рэйчел
 Rachel.hi = () => {
     window._Rachel = {
@@ -31,11 +26,7 @@ Rachel.hi = () => {
 Rachel.find = (selector) => {
     if (window._Rachel) { 
         let result = document.querySelector(selector)
-        if (result === null) {
-            console.warn("%cRachel couldn't find anything ;-(", "font-weight: bold")
-        } else {
-            return result
-        }
+        return result
     }
     else Rachel.sad()
 }
@@ -43,22 +34,22 @@ Rachel.find = (selector) => {
 // Найти несколько элементов по селектору
 Rachel.findMany = (selector) => {
     if (window._Rachel) {
-        if (document.querySelectorAll(selector).length === 0) {
-            console.warn("%cRachel couldn't find anything ;-(", "font-weight: bold")
-        } else {
-            return document.querySelectorAll(selector)
-        }
+        return document.querySelectorAll(selector)
     }
     else Rachel.sad()
 }
 
 
 // РЕАКТИВНОСТЬ
-// Машина состояний
 var RachelStore = {
     username: "Max"
 }
+// Для того, чтобы добавить какие-то данные в RachelStore, 
+// необходимо прописать RachelStore.<название переменной>
+// Для того, чтобы получить значение существующей переменной, 
+// необходимо добавить в тег атрибут rachel-store="<название переменной>"
 
+// Машина состояний
 RachelStore = new Proxy(RachelStore, {
     set: (target, name, val) => {
         target[name] = val
@@ -68,17 +59,19 @@ RachelStore = new Proxy(RachelStore, {
 
 // Обновление элементов
 Rachel._refresh = (sticker) => {
-    Rachel.find(`*[rachel-state=${sticker.name}]`).innerText = sticker.val
+    let el = Rachel.find(`*[rachel-state=${sticker.name}]`)
+    try {
+        el.innerText = sticker.val
+    } catch {}
 }
-
-
-RachelStore.age = 20
 
 
 
 
 
 Rachel.hi()
+
+RachelStore.age = 20
 
 Rachel.find("span").innerText = RachelStore.username
 
