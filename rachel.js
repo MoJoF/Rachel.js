@@ -1,275 +1,203 @@
+/* Rachel.js v1.1.0
+ * Modules:
+ * Rachel Core: Rachel, .version, .use, .config
+ * Rachel Event Driven: .on, .off, .emit, .once, .when, .clear
+ * Rachel Store: .store, .getState, .setState, .watch, .computed, .mount
+ * Rachel DOM: .select, .create, .remove, .html, .text, .css, .attr, .on, .off, .append, .prepend, .replace, .clone, .show, .hide, .toggle
+ * Rachel DOM Optimizations: .batch, .schedule, .lazy, .observe, .resize, .visible
+ * Rachel HTTP: .get, .post, .put, .patch, .delete, .upload 
+ * Rachel Storage (localStorage): .set, .get, .remove, .clear 
+ * Rachel Database (indexedDB): .open, .insert, .update, .delete, .findAll, .find 
+ * Rachel FS (OPFS): .read, .write, .remove, .exists, .list, .mkdir, .move, .copy
+ * Rachel Cache: .set, .get, .clear, .remove, .keys
+ * Rachel Worker: .create, .destroy, .send, .on 
+ * Rachel Socket: .connect, .send, .close, .on
+ * Rachel Browser: .clipboard, .share, .notify, .geo, .channel, .network, .screen, .wakelock, .battery
+ * Rachel Voice: .listen, .stop, .say, .pause
+ * Rachel Media: .camera, .microphone, .audio, .video
+ * Rachel Profiler: .start, .stop, .reset, .report (fps, memory, domUpdates, events, network, renders)
+ * Rachel Compiler: .lexer, .parser 
+ * Rachel Validate: .phone, .email
+ * Rachel Masks: .phone, .email, .date, .currency
+ * Rachel Utils: .debounce, .throttle, .clone, .merge, .random, .uuid, .hash, .format, .parse
+ * Rachel Animations: .animate, .transition, .keyframes
+ * Rachel Canvas Toolkit: .create, .clear, .draw, .animate, .scene, .layer, .rect, .circle, .line, .text, .image 
+*/
+
 (function () {
+    'use strict';
+    // Защита от повторной загрузки
+    if (window.Rachel) {
+        console.warn("[Warning] Rachel already loaded");
+        return;
+    }
+
     const internals = {
         initialized: false,
-        mounted: false,
-        store: null,
-        watchers: new Map(),
-        computed: new Map()
+        config: {},
     };
 
     function Rachel() {
-        if (internals.initialized) return;
-
-        internals.initialized = true;
-
-        console.log(
-            `[Success] Rachel JS v${Rachel.version} initialized.`
-        );
+        if (internals.initialized) return Rachel;
+        internals.initialized = true
+        console.log('[Success] Rachel.js initialized. Current version:', Rachel.version)
+        return Rachel
     }
 
-    Rachel.version = "1.1.0";
+    Rachel.version = '1.0.0'
 
-    Rachel.hello = function () {
-        console.log("[Rachel] Hi!");
-    };
+    Rachel.config = function (options = {}) {
+        Object.assign(
+            internals.config,
+            options
+        );
+        return Rachel;
+    }
+    Rachel.getConfig = function (param) { return internals.config ? internals.config[param] : undefined }
 
-    Rachel.select = function (selector, multiple = false) {
-        Rachel.requireInit();
+    // EVENTS DRIVEN MODULE
+    Rachel.events = {};
 
-        return multiple
-            ? document.querySelectorAll(selector)
-            : document.querySelector(selector);
-    };
-
-    Rachel.requireInit = function () {
-        if (!internals.initialized) {
-            throw new Error(
-                "Rachel не инициализирована."
-            );
+    Rachel.events.init = function () {
+        if (internals.events?.initialized) {
+            return Rachel;
         }
-    };
 
-    Rachel.requireStore = function () {
-        if (!internals.store) {
-            throw new Error(
-                "Store не инициализирован."
-            );
+        internals.events = {
+            listeners: {},
+            history: {},
+            initialized: true
+        };
+
+        return Rachel;
+    }
+
+    Rachel.events.ensureEvents = function () {
+        if (!internals.initialized) throw new Error('Rachel.js is not initialized. Please call Rachel() before using events.');
+
+        if (!internals.events || !internals.events.initialized) Rachel.events.init();
+        return internals.events;
+    }
+
+    Rachel.events.on = function (eventName, fn) {
+        if (typeof fn !== 'function') throw new Error('Listener must be a function');
+
+        if (typeof eventName !== 'string' || !eventName.trim()) throw new Error('Event name must be a non-empty string');
+
+        const eventsConfig = Rachel.events.ensureEvents();
+
+        const [name, namespace] = eventName.split('.');
+        if (!name) return Rachel;
+
+        eventsConfig.listeners[name] = eventsConfig.listeners[name] || [];
+
+        const listenerWrapper = (data) => fn(data);
+        listenerWrapper._originalFn = fn;
+        if (namespace) listenerWrapper._ns = namespace;
+
+        eventsConfig.listeners[name].push(listenerWrapper);
+        return Rachel;
+    }
+
+    Rachel.events.once = function (eventName, fn) {
+        const eventsConfig = Rachel.events.ensureEvents();
+
+        const [name, namespace] = eventName.split('.');
+        if (!name) return Rachel;
+
+        eventsConfig.listeners[name] = eventsConfig.listeners[name] || [];
+
+        const listenerWrapper = (data) => fn(data);
+        listenerWrapper._originalFn = fn;
+        listenerWrapper._once = true;
+        if (namespace) listenerWrapper._ns = namespace;
+
+        eventsConfig.listeners[name].push(listenerWrapper);
+        return Rachel;
+    }
+
+    Rachel.events.when = function (eventName, fn) {
+        const eventsConfig = Rachel.events.ensureEvents();
+
+        const [name] = eventName.split('.');
+
+        if (eventsConfig.history[name] && eventsConfig.history[name].fired) {
+            fn(eventsConfig.history[name].data);
+        } else {
+            Rachel.events.once(eventName, fn);
         }
-    };
+        return Rachel;
+    }
 
-    Rachel.store = function (states = {}) {
-        Rachel.requireInit();
+    Rachel.events.emit = function (eventName, data = {}) {
+        const eventsConfig = Rachel.events.ensureEvents();
 
-        const normalized = {};
+        const [name] = eventName.split('.');
 
-        Object.entries(states).forEach(([key, value]) => {
-            normalized[key] = {
-                value
-            };
+        eventsConfig.history[name] = { fired: true, data };
+
+        if (!eventsConfig.listeners[name]) return Rachel;
+
+        const currentListeners = [...eventsConfig.listeners[name]];
+        currentListeners.forEach(fn => fn(data));
+
+        eventsConfig.listeners[name] = eventsConfig.listeners[name].filter(listener => !listener._once);
+
+        return Rachel;
+    }
+
+    Rachel.events.off = function (eventName, fn) {
+        const eventsConfig = Rachel.events.ensureEvents();
+
+        if (typeof eventName !== 'string' || !eventName.trim()) return Rachel;
+
+        const [name, namespace] = eventName.split('.');
+
+        if (name && !eventsConfig.listeners[name]) return Rachel;
+
+        if (!name && namespace) {
+            for (let key in eventsConfig.listeners) {
+                eventsConfig.listeners[key] = eventsConfig.listeners[key].filter(listener => listener._ns !== namespace);
+            }
+            return Rachel;
+        }
+
+        if (!fn && !namespace) {
+            eventsConfig.listeners[name] = [];
+            return Rachel;
+        };
+
+        eventsConfig.listeners[name] = eventsConfig.listeners[name].filter(listener => {
+            const matchFn = fn ? (listener === fn || listener._originalFn === fn) : true;
+            const matchNs = namespace ? listener._ns === namespace : true;
+            return !(matchFn && matchNs);
         });
 
-        internals.store = new Proxy(normalized, {
-            get(target, prop) {
-                return target[prop];
-            },
+        return Rachel;
+    }
 
-            set(target, prop, value) {
-                const oldValue =
-                    target[prop]?.value;
+    Rachel.events.has = function (eventName) {
+        const eventsConfig = Rachel.events.ensureEvents();
 
-                target[prop] = {
-                    value
-                };
+        const [name] = eventName.split('.');
+        return !!(eventsConfig.listeners[name] && eventsConfig.listeners[name].length);
+    }
 
-                Rachel.updateDOM(prop, value);
+    Rachel.events.clear = function () {
+        const eventsConfig = Rachel.events.ensureEvents();
 
-                Rachel.runWatchers(
-                    prop,
-                    value,
-                    oldValue
-                );
+        eventsConfig.listeners = {};
+        eventsConfig.history = {};
 
-                Rachel.updateComputed();
+        return Rachel;
+    }
 
-                return true;
-            }
-        });
-
-        return internals.store;
-    };
-
-    Rachel.getState = function (name) {
-        Rachel.requireStore();
-
-        if (!(name in internals.store)) {
-            throw new Error(
-                `Состояние "${name}" не найдено.`
-            );
-        }
-
-        return internals.store[name].value;
-    };
-
-    Rachel.setState = function (name, value) {
-        Rachel.requireStore();
-
-        internals.store[name] = value;
-    };
-
-    Rachel.watch = function (name, callback) {
-        Rachel.requireStore();
-
-        if (!internals.watchers.has(name)) {
-            internals.watchers.set(name, []);
-        }
-
-        internals.watchers
-            .get(name)
-            .push(callback);
-    };
-
-    Rachel.runWatchers = function (
-        name,
-        newValue,
-        oldValue
-    ) {
-        const list =
-            internals.watchers.get(name);
-
-        if (!list) return;
-
-        list.forEach(fn =>
-            fn(newValue, oldValue)
-        );
-    };
-
-    Rachel.computed = function (
-        name,
-        callback
-    ) {
-        Rachel.requireStore();
-
-        internals.computed.set(
-            name,
-            callback
-        );
-
-        const result = callback();
-
-        if (!(name in internals.store)) {
-            internals.store[name] = result;
-        }
-    };
-
-    Rachel.updateComputed = function () {
-        internals.computed.forEach(
-            (callback, name) => {
-                const value =
-                    callback();
-
-                if (
-                    !internals.store[name] ||
-                    internals.store[name]
-                        .value !== value
-                ) {
-                    internals.store[name] = value;
-                }
-            }
-        );
-    };
-
-    Rachel.updateDOM = function (
-        name,
-        value
-    ) {
-        document
-            .querySelectorAll(
-                `[r-var="${name}"]`
-            )
-            .forEach(el => {
-                el.textContent =
-                    value ?? "";
-            });
-
-        document
-            .querySelectorAll(
-                `[r-model="${name}"]`
-            )
-            .forEach(el => {
-                if (
-                    el.value !== value
-                ) {
-                    el.value =
-                        value ?? "";
-                }
-            });
-    };
-
-    Rachel.mount = function () {
-        Rachel.requireStore();
-
-        if (internals.mounted) {
-            return;
-        }
-
-        internals.mounted = true;
-
-        document
-            .querySelectorAll(
-                "[r-model]"
-            )
-            .forEach(el => {
-                const state =
-                    el.getAttribute(
-                        "r-model"
-                    );
-
-                if (
-                    !(state in internals.store)
-                ) {
-                    internals.store[state] =
-                        "";
-                }
-
-                el.value =
-                    Rachel.getState(
-                        state
-                    );
-
-                el.addEventListener(
-                    "input",
-                    e => {
-                        Rachel.setState(
-                            state,
-                            e.target.value
-                        );
-                    }
-                );
-            });
-
-        document
-            .querySelectorAll(
-                "[r-var]"
-            )
-            .forEach(el => {
-                const state =
-                    el.getAttribute(
-                        "r-var"
-                    );
-
-                if (
-                    !(state in internals.store)
-                ) {
-                    throw new Error(
-                        `Состояние "${state}" не найдено.`
-                    );
-                }
-
-                el.textContent =
-                    Rachel.getState(
-                        state
-                    );
-            });
-    };
+    // 
 
     window.Rachel = Rachel;
 })();
 
-Rachel()
-Rachel.store({
-    username: 'Max'
-})
+Rachel();
+Rachel.events.on('rachel_initialized', () => { console.log('[Succe1111ss] Rachel.js is ready to use') })
 
-Rachel.mount()
-
-Rachel.hello()
+Rachel.events.emit('rachel_initialized');
