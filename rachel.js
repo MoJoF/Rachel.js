@@ -271,3 +271,5 @@ Rachel.store({
 })
 
 Rachel.mount()
+
+Rachel.hello()
