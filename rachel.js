@@ -1,120 +1,273 @@
-// Работа с DOM
-// Реактивность
-// Работа с localStorage
-// Работа с indexedDB
-// Работа с web workers
+(function () {
+    const internals = {
+        initialized: false,
+        mounted: false,
+        store: null,
+        watchers: new Map(),
+        computed: new Map()
+    };
 
-function Rachel() {
-    window.__isRachelInit__ = true
-    console.log('[Success] Библиотека Rachel JS успешно инициализирована.')
-}
+    function Rachel() {
+        if (internals.initialized) return;
 
-// Переменная с версией
-Rachel.version = "1.0.0"
+        internals.initialized = true;
 
-// Фунция, чтобы поздороваться
-Rachel.hello = function () {
-    console.log('[Rachel] Hi!')
-}
+        console.log(
+            `[Success] Rachel JS v${Rachel.version} initialized.`
+        );
+    }
 
-// Первичная инициализация объекта состояний
-Rachel.store = function (states) {
-    if (!window.__isRachelInit__) throw new Error('Ошибка! Библиотека не инициализирована.')
-    if (typeof states !== 'object' || states === null) throw new Error('Ошибка! В хранилище должен передаваться объект.')
+    Rachel.version = "1.1.0";
 
-    window.__isRachelStoreInitialized = true // флаг инициализации состояний
-    window.__RachelVars = Object.keys(states) // реестр состояний
+    Rachel.hello = function () {
+        console.log("[Rachel] Hi!");
+    };
 
-    const normalizedStates = {};
-    window.__RachelVars.forEach(key => {
-        const val = states[key];
-        if (val && typeof val === 'object' && 'value' in val) {
-            normalizedStates[key] = val;
-        } else {
-            normalizedStates[key] = { value: val };
+    Rachel.select = function (selector, multiple = false) {
+        Rachel.requireInit();
+
+        return multiple
+            ? document.querySelectorAll(selector)
+            : document.querySelector(selector);
+    };
+
+    Rachel.requireInit = function () {
+        if (!internals.initialized) {
+            throw new Error(
+                "Rachel не инициализирована."
+            );
         }
-    });
+    };
 
-    window.__RachelStore = new Proxy(normalizedStates, {
-        get(target, name) {
-            return target[name];
-        },
-        set(target, name, incomingValue) {
-            let newValue = incomingValue;
-            if (incomingValue && typeof incomingValue === 'object' && 'value' in incomingValue) {
-                target[name] = incomingValue;
-                newValue = incomingValue.value;
-            } else {
-                target[name] = { value: incomingValue };
+    Rachel.requireStore = function () {
+        if (!internals.store) {
+            throw new Error(
+                "Store не инициализирован."
+            );
+        }
+    };
+
+    Rachel.store = function (states = {}) {
+        Rachel.requireInit();
+
+        const normalized = {};
+
+        Object.entries(states).forEach(([key, value]) => {
+            normalized[key] = {
+                value
+            };
+        });
+
+        internals.store = new Proxy(normalized, {
+            get(target, prop) {
+                return target[prop];
+            },
+
+            set(target, prop, value) {
+                const oldValue =
+                    target[prop]?.value;
+
+                target[prop] = {
+                    value
+                };
+
+                Rachel.updateDOM(prop, value);
+
+                Rachel.runWatchers(
+                    prop,
+                    value,
+                    oldValue
+                );
+
+                Rachel.updateComputed();
+
+                return true;
             }
+        });
 
-            Rachel.updateDOM(name, newValue);
-            return true;
-        }
-    });
-}
+        return internals.store;
+    };
 
-Rachel.updateDOM = function (name, value) {
-    Rachel.select(`[r-var="${name}"]`, true).forEach(el => {
-        el.textContent = value ?? '';
-    });
+    Rachel.getState = function (name) {
+        Rachel.requireStore();
 
-    Rachel.select(`input[r-model="${name}"]`, true).forEach(el => {
-        if (el.value !== value) el.value = value ?? '';
-    });
-}
-
-Rachel.select = function (selector, multiply = false) {
-    if (!window.__isRachelInit__) throw new Error('Ошибка! Библиотека не инициализирована.')
-    if (multiply) return document.querySelectorAll(selector)
-    return document.querySelector(selector)
-}
-
-Rachel.relate = function () {
-    if (!window.__isRachelStoreInitialized) throw new Error("Ошибка! Store не инициализирован. Воспользуйтесь Rachel.store({}) для инициализации пустого хранилища .")
-
-    Rachel.select('input[r-model]', true).forEach(el => {
-        let varName = el.getAttribute("r-model")
-
-        if (!window.__RachelVars.includes(varName)) {
-            window.__RachelVars.push(varName)
+        if (!(name in internals.store)) {
+            throw new Error(
+                `Состояние "${name}" не найдено.`
+            );
         }
 
-        if (!(varName in window.__RachelStore)) {
-            window.__RachelStore[varName] = { value: "" };
+        return internals.store[name].value;
+    };
+
+    Rachel.setState = function (name, value) {
+        Rachel.requireStore();
+
+        internals.store[name] = value;
+    };
+
+    Rachel.watch = function (name, callback) {
+        Rachel.requireStore();
+
+        if (!internals.watchers.has(name)) {
+            internals.watchers.set(name, []);
         }
 
-        el.value = window.__RachelStore[varName].value;
+        internals.watchers
+            .get(name)
+            .push(callback);
+    };
 
-        el.addEventListener('input', function (e) {
-            let v = e.target.value;
-            window.__RachelStore[varName] = { value: v };
-        })
-    })
+    Rachel.runWatchers = function (
+        name,
+        newValue,
+        oldValue
+    ) {
+        const list =
+            internals.watchers.get(name);
 
-    Rachel.select('[r-var]', true).forEach(el => {
-        let state = el.getAttribute('r-var')
+        if (!list) return;
 
-        if (!(state in window.__RachelStore) && !window.__RachelVars.includes(state)) {
-            throw new Error(`Ошибка! Состояния "${state}" не существует.`);
+        list.forEach(fn =>
+            fn(newValue, oldValue)
+        );
+    };
+
+    Rachel.computed = function (
+        name,
+        callback
+    ) {
+        Rachel.requireStore();
+
+        internals.computed.set(
+            name,
+            callback
+        );
+
+        const result = callback();
+
+        if (!(name in internals.store)) {
+            internals.store[name] = result;
+        }
+    };
+
+    Rachel.updateComputed = function () {
+        internals.computed.forEach(
+            (callback, name) => {
+                const value =
+                    callback();
+
+                if (
+                    !internals.store[name] ||
+                    internals.store[name]
+                        .value !== value
+                ) {
+                    internals.store[name] = value;
+                }
+            }
+        );
+    };
+
+    Rachel.updateDOM = function (
+        name,
+        value
+    ) {
+        document
+            .querySelectorAll(
+                `[r-var="${name}"]`
+            )
+            .forEach(el => {
+                el.textContent =
+                    value ?? "";
+            });
+
+        document
+            .querySelectorAll(
+                `[r-model="${name}"]`
+            )
+            .forEach(el => {
+                if (
+                    el.value !== value
+                ) {
+                    el.value =
+                        value ?? "";
+                }
+            });
+    };
+
+    Rachel.mount = function () {
+        Rachel.requireStore();
+
+        if (internals.mounted) {
+            return;
         }
 
-        el.textContent = window.__RachelStore[state]?.value ?? '';
-    })
-}
+        internals.mounted = true;
 
-Rachel.getState = function (state) {
-    if (!window.__isRachelStoreInitialized) throw new Error("Ошибка! Store не инициализирован. Воспользуйтесь Rachel.store({}) для инициализации пустого хранилища .")
-    if (!window.__RachelStore[state]) throw new Error("Данного состояния не существует.")
-    return window.__RachelStore[state]
-}
+        document
+            .querySelectorAll(
+                "[r-model]"
+            )
+            .forEach(el => {
+                const state =
+                    el.getAttribute(
+                        "r-model"
+                    );
+
+                if (
+                    !(state in internals.store)
+                ) {
+                    internals.store[state] =
+                        "";
+                }
+
+                el.value =
+                    Rachel.getState(
+                        state
+                    );
+
+                el.addEventListener(
+                    "input",
+                    e => {
+                        Rachel.setState(
+                            state,
+                            e.target.value
+                        );
+                    }
+                );
+            });
+
+        document
+            .querySelectorAll(
+                "[r-var]"
+            )
+            .forEach(el => {
+                const state =
+                    el.getAttribute(
+                        "r-var"
+                    );
+
+                if (
+                    !(state in internals.store)
+                ) {
+                    throw new Error(
+                        `Состояние "${state}" не найдено.`
+                    );
+                }
+
+                el.textContent =
+                    Rachel.getState(
+                        state
+                    );
+            });
+    };
+
+    window.Rachel = Rachel;
+})();
 
 Rachel()
-
 Rachel.store({
-    name: "Максим"
+    username: 'Max'
 })
 
-Rachel.relate()
-
-console.log(Rachel.getState("username"))
+Rachel.mount()
