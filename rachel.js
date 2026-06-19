@@ -54,7 +54,7 @@ Rachel.store = function (states) {
     });
 }
 
-Rachel.updateDOM = function(name, value) {
+Rachel.updateDOM = function (name, value) {
     Rachel.select(`[r-var="${name}"]`, true).forEach(el => {
         el.textContent = value ?? '';
     });
@@ -103,7 +103,7 @@ Rachel.relate = function () {
     })
 }
 
-Rachel.getState = function(state) {
+Rachel.getState = function (state) {
     if (!window.__isRachelStoreInitialized) throw new Error("Ошибка! Store не инициализирован. Воспользуйтесь Rachel.store({}) для инициализации пустого хранилища .")
     if (!window.__RachelStore[state]) throw new Error("Данного состояния не существует.")
     return window.__RachelStore[state]
