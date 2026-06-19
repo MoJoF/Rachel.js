@@ -192,12 +192,31 @@
         return Rachel;
     }
 
-    // 
+    // STORE MANAGEMENT MODULE
+    Rachel.store = {};
+
+    Rachel.store.init = function () {
+        if (internals.store?.initialized) {
+            return Rachel;
+        }
+
+        internals.store = {
+            initialized: true
+        };
+
+        return Rachel;
+    }
+
+    Rachel.store.ensureStore = function () {
+        if (!internals.initialized) throw new Error('Rachel.js is not initialized. Please call Rachel() before using store.');
+        if (!internals.store || !internals.store.initialized) Rachel.store.init();
+    }
 
     window.Rachel = Rachel;
 })();
 
-Rachel();
-Rachel.events.on('rachel_initialized', () => { console.log('[Succe1111ss] Rachel.js is ready to use') })
 
-Rachel.events.emit('rachel_initialized');
+Rachel();
+Rachel.events.on('rachel.initialized', () => { console.log('[Succe1111ss] Rachel.js is ready to use') })
+
+Rachel.events.emit('rachel.initialized');
