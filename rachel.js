@@ -707,6 +707,8 @@ class _RachelDB {
 }
 
 
+
+
 class _Rachel {
     constructor() {
         this.version = '1.0.0'
@@ -722,7 +724,7 @@ const R = new _Rachel()
 
 async function init() {
     await _RachelDB.open()
-    await _RachelDB.update('45444545', { name: "22122", id: 13, f: '1' })
+    await _RachelDB.delete('45444545', 13)
 }
 
 init()
