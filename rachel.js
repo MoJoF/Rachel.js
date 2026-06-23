@@ -5,7 +5,7 @@
  * Rachel Store: .store, .getState, .setState, .watch, .computed, .mount ГОТОВО
  * Rachel DOM: .select, .create, .remove, .html, .text, .css, .attr, .on, .off, .append, .prepend, .replace, .clone, .show, .hide, .toggle
  * Rachel DOM Optimizations: .batch, .schedule, .lazy, .observe, .resize, .visible
- * Rachel HTTP: .get, .post, .put, .patch, .delete, .upload 
+ * Rachel HTTP: .get, .post, .put, .patch, .delete, .upload // ГОТОВО
  * Rachel Storage (localStorage): .set, .get, .remove, .clear 
  * Rachel Database (indexedDB): .open, .insert, .update, .delete, .findAll, .find 
  * Rachel FS (OPFS): .read, .write, .remove, .exists, .list, .mkdir, .move, .copy
@@ -173,9 +173,14 @@ class _RachelStore {
 
         this.state = {};
         this.watchers = {};
-        this.computed = {};
+
+        this.__boundModels = new WeakSet();
+        this.__boundAttrs = new WeakSet();
+        this.__boundText = new WeakSet();
 
         this.__mounted = false;
+
+        this.__mount();
     }
 
     create(name, value) {
@@ -189,6 +194,9 @@ class _RachelStore {
 
     set(name, value) {
         const oldValue = this.state[name];
+
+        if (oldValue === value) return this;
+
         this.state[name] = value;
 
         if (this.watchers[name]) {
@@ -217,7 +225,9 @@ class _RachelStore {
     unwatch(name, fn) {
         if (!this.watchers[name]) return this;
 
-        this.watchers[name] = this.watchers[name].filter(cb => cb !== fn);
+        this.watchers[name] =
+            this.watchers[name].filter(cb => cb !== fn);
+
         return this;
     }
 
@@ -237,55 +247,63 @@ class _RachelStore {
             const key = el.getAttribute('r-model');
             if (!key) return;
 
-            const isCheckbox = el instanceof HTMLInputElement && el.type === 'checkbox';
-            const isRadio = el instanceof HTMLInputElement && el.type === 'radio';
+            if (this.__boundModels.has(el)) return;
+            this.__boundModels.add(el);
 
             if (!(key in this.state)) {
-                if (isCheckbox) {
-                    this.create(key, el.checked);
-                } else {
-                    this.create(key, el.value ?? '');
-                }
+                this.state[key] = this.__getElementValue(el);
             }
 
-            const updateFromDom = () => {
-                if (isCheckbox) {
-                    this.set(key, el.checked);
-                } else if (isRadio) {
-                    if (el.checked) this.set(key, el.value);
-                } else {
-                    this.set(key, el.value);
-                }
-            };
+            this.__setElementValue(el, this.state[key]);
 
-            const eventName = isCheckbox || isRadio ? 'change' : 'input';
+            const eventName = this.__getInputEvent(el);
 
-            el.addEventListener(eventName, updateFromDom);
+            el.addEventListener(eventName, () => {
+                this.set(key, this.__getElementValue(el));
+            });
 
             this.watch(key, value => {
-                if (isCheckbox) {
-                    el.checked = Boolean(value);
-                } else if (isRadio) {
-                    el.checked = el.value === value;
-                } else {
-                    if (el.value !== value) {
-                        el.value = value ?? '';
-                    }
-                }
+                this.__setElementValue(el, value);
             });
         });
-
-        return this;
     }
 
-    __mountVars() {
+    __mountAttributes() {
+        const elements = document.querySelectorAll('*');
+
+        elements.forEach(el => {
+            const attrs = Array.from(el.attributes);
+
+            for (const attr of attrs) {
+                if (!attr.name.startsWith(':')) continue;
+
+                const realAttr = attr.name.slice(1);
+                const key = attr.value;
+
+                if (!key) continue;
+
+                const update = (value) => {
+                    el.setAttribute(realAttr, value ?? '');
+                };
+
+                update(this.get(key));
+
+                this.watch(key, update);
+            }
+        });
+    }
+
+    __mountTextBindings() {
         const elements = document.querySelectorAll('[r-var]');
 
         elements.forEach(el => {
             const key = el.getAttribute('r-var');
             if (!key) return;
 
-            const update = value => {
+            if (this.__boundText.has(el)) return;
+            this.__boundText.add(el);
+
+            const update = (value) => {
                 el.textContent = value ?? '';
             };
 
@@ -293,70 +311,67 @@ class _RachelStore {
 
             this.watch(key, update);
         });
-
-        return this;
     }
 
-    __mountAttributes() {
-        const elements = document.querySelectorAll('*');
-
-        const booleanAttrs = [
-            'disabled',
-            'checked',
-            'selected',
-            'readonly',
-            'required',
-            'hidden'
-        ];
-
-        elements.forEach(el => {
-            Array.from(el.attributes).forEach(attr => {
-
-                if (!attr.name.startsWith(':')) return;
-
-                const realAttr = attr.name.slice(1);
-                const stateName = attr.value;
-
-                const update = value => {
-
-                    if (booleanAttrs.includes(realAttr)) {
-                        if (value) {
-                            el.setAttribute(realAttr, '');
-                        } else {
-                            el.removeAttribute(realAttr);
-                        }
-                        return;
-                    }
-
-                    el.setAttribute(realAttr, value ?? '');
-                };
-
-                update(this.get(stateName));
-
-                this.watch(stateName, update);
-            });
-        });
-
-        return this;
-    }
-
-    mount() {
-        if (this.__mounted) {
-            return this;
-        }
-
+    __mount() {
+        if (this.__mounted) return this;
         this.__mounted = true;
 
         this.__mountModels();
-        this.__mountVars();
         this.__mountAttributes();
+        this.__mountTextBindings();
 
         return this;
+    }
+
+    __getElementValue(el) {
+        if (el instanceof HTMLInputElement) {
+            if (el.type === 'checkbox') return el.checked;
+            if (el.type === 'radio') return el.value;
+            return el.value;
+        }
+
+        if (el instanceof HTMLTextAreaElement) {
+            return el.value;
+        }
+
+        return el.textContent;
+    }
+
+    __setElementValue(el, value) {
+        if (el instanceof HTMLInputElement) {
+            if (el.type === 'checkbox') {
+                el.checked = Boolean(value);
+            } else if (el.type === 'radio') {
+                el.checked = el.value === value;
+            } else {
+                el.value = value ?? '';
+            }
+            return;
+        }
+
+        if (el instanceof HTMLTextAreaElement) {
+            el.value = value ?? '';
+            return;
+        }
+
+        el.textContent = value ?? '';
+    }
+
+    __getInputEvent(el) {
+        if (el instanceof HTMLInputElement) {
+            if (el.type === 'checkbox' || el.type === 'radio') {
+                return 'change';
+            }
+            return 'input';
+        }
+
+        return 'input';
     }
 }
 
 /*
- * 
+ * Модуль для отправки HTTP-запросов на сервер
 */
 
 class _RachelHTTP {
@@ -371,7 +386,7 @@ class _RachelHTTP {
         const fullUrl = this.baseUrl + url
 
         const options = {
-            method, 
+            method,
             headers: {
                 ...this.headers,
                 ...(config.headers || {})
@@ -427,7 +442,5 @@ class _Rachel {
 }
 
 const R = new _Rachel()
-R.store.mount()
 
-const http = new _RachelHTTP()
-http.delete('https://jsonplaceholder.typicode.com/posts/1').then(data => console.log(data))
+document.addEventListener('DOMContentLoaded', () => R.store.__mount())
