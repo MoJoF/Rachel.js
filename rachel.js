@@ -24,199 +24,121 @@
  * Rachel Canvas Toolkit: .create, .clear, .draw, .animate, .scene, .layer, .rect, .circle, .line, .text, .image 
 */
 
-(function () {
-    'use strict';
-    // Защита от повторной загрузки
-    if (window.Rachel) {
-        console.warn("[Warning] Rachel already loaded");
-        return;
+class _RachelEventEmitter {
+    constructor() {
+        this.listeners = {}
+        this.history = {}
     }
 
-    const internals = {
-        initialized: false,
-        config: {},
-    };
-
-    function Rachel() {
-        if (internals.initialized) return Rachel;
-        internals.initialized = true
-        console.log('[Success] Rachel.js initialized. Current version:', Rachel.version)
-        return Rachel
-    }
-
-    Rachel.version = '1.0.0'
-
-    Rachel.config = function (options = {}) {
-        Object.assign(
-            internals.config,
-            options
-        );
-        return Rachel;
-    }
-    Rachel.getConfig = function (param) { return internals.config ? internals.config[param] : undefined }
-
-    // EVENTS DRIVEN MODULE
-    Rachel.events = {};
-
-    Rachel.events.init = function () {
-        if (internals.events?.initialized) {
-            return Rachel;
-        }
-
-        internals.events = {
-            listeners: {},
-            history: {},
-            initialized: true
-        };
-
-        return Rachel;
-    }
-
-    Rachel.events.ensureEvents = function () {
-        if (!internals.initialized) throw new Error('Rachel.js is not initialized. Please call Rachel() before using events.');
-
-        if (!internals.events || !internals.events.initialized) Rachel.events.init();
-        return internals.events;
-    }
-
-    Rachel.events.on = function (eventName, fn) {
+    on(eventName, fn) {
         if (typeof fn !== 'function') throw new Error('Listener must be a function');
-
         if (typeof eventName !== 'string' || !eventName.trim()) throw new Error('Event name must be a non-empty string');
 
-        const eventsConfig = Rachel.events.ensureEvents();
-
         const [name, namespace] = eventName.split('.');
-        if (!name) return Rachel;
+        if (!name) return this;
 
-        eventsConfig.listeners[name] = eventsConfig.listeners[name] || [];
+        this.listeners[name] = this.listeners[name] || [];
 
         const listenerWrapper = (data) => fn(data);
         listenerWrapper._originalFn = fn;
         if (namespace) listenerWrapper._ns = namespace;
 
-        eventsConfig.listeners[name].push(listenerWrapper);
-        return Rachel;
+        this.listeners[name].push(listenerWrapper);
+        return this;
     }
 
-    Rachel.events.once = function (eventName, fn) {
-        const eventsConfig = Rachel.events.ensureEvents();
-
+    once(eventName, fn) {
         const [name, namespace] = eventName.split('.');
-        if (!name) return Rachel;
+        if (!name) return this;
 
-        eventsConfig.listeners[name] = eventsConfig.listeners[name] || [];
+        this.listeners[name] = this.listeners[name] || [];
 
         const listenerWrapper = (data) => fn(data);
         listenerWrapper._originalFn = fn;
         listenerWrapper._once = true;
         if (namespace) listenerWrapper._ns = namespace;
 
-        eventsConfig.listeners[name].push(listenerWrapper);
-        return Rachel;
+        this.listeners[name].push(listenerWrapper);
+        return this;
     }
 
-    Rachel.events.when = function (eventName, fn) {
-        const eventsConfig = Rachel.events.ensureEvents();
-
+    when(eventName, fn) {
         const [name] = eventName.split('.');
 
-        if (eventsConfig.history[name] && eventsConfig.history[name].fired) {
-            fn(eventsConfig.history[name].data);
+        if (this.history[name] && this.history[name].fired) {
+            fn(this.history[name].data);
         } else {
-            Rachel.events.once(eventName, fn);
+            this.once(eventName, fn);
         }
-        return Rachel;
+        return this;
     }
 
-    Rachel.events.emit = function (eventName, data = {}) {
-        const eventsConfig = Rachel.events.ensureEvents();
-
+    emit(eventName, data = {}) {
         const [name] = eventName.split('.');
 
-        eventsConfig.history[name] = { fired: true, data };
+        this.history[name] = { fired: true, data };
 
-        if (!eventsConfig.listeners[name]) return Rachel;
+        if (!this.listeners[name]) return this;
 
-        const currentListeners = [...eventsConfig.listeners[name]];
+        const currentListeners = [...this.listeners[name]];
         currentListeners.forEach(fn => fn(data));
 
-        eventsConfig.listeners[name] = eventsConfig.listeners[name].filter(listener => !listener._once);
+        this.listeners[name] = this.listeners[name].filter(listener => !listener._once);
 
-        return Rachel;
+        return this;
     }
 
-    Rachel.events.off = function (eventName, fn) {
-        const eventsConfig = Rachel.events.ensureEvents();
-
-        if (typeof eventName !== 'string' || !eventName.trim()) return Rachel;
+    off(eventName, fn) {
+        if (typeof eventName !== 'string' || !eventName.trim()) return this;
 
         const [name, namespace] = eventName.split('.');
 
-        if (name && !eventsConfig.listeners[name]) return Rachel;
+        if (name && !this.listeners[name]) return this;
 
         if (!name && namespace) {
-            for (let key in eventsConfig.listeners) {
-                eventsConfig.listeners[key] = eventsConfig.listeners[key].filter(listener => listener._ns !== namespace);
+            for (let key in this.listeners) {
+                this.listeners[key] = this.listeners[key].filter(listener => listener._ns !== namespace);
             }
-            return Rachel;
+            return this;
         }
 
         if (!fn && !namespace) {
-            eventsConfig.listeners[name] = [];
-            return Rachel;
+            this.listeners[name] = [];
+            return this;
         };
 
-        eventsConfig.listeners[name] = eventsConfig.listeners[name].filter(listener => {
+        this.listeners[name] = this.listeners[name].filter(listener => {
             const matchFn = fn ? (listener === fn || listener._originalFn === fn) : true;
             const matchNs = namespace ? listener._ns === namespace : true;
             return !(matchFn && matchNs);
         });
 
-        return Rachel;
+        return this;
     }
 
-    Rachel.events.has = function (eventName) {
-        const eventsConfig = Rachel.events.ensureEvents();
-
+    has(eventName) {
         const [name] = eventName.split('.');
-        return !!(eventsConfig.listeners[name] && eventsConfig.listeners[name].length);
+        return !!(this.listeners[name] && this.listeners[name].length);
     }
 
-    Rachel.events.clear = function () {
-        const eventsConfig = Rachel.events.ensureEvents();
-
-        eventsConfig.listeners = {};
-        eventsConfig.history = {};
-
-        return Rachel;
+    clear() {
+        this.listeners = {};
+        this.history = {};
+        return this;
     }
+}
 
-    // STORE MANAGEMENT MODULE
-    Rachel.store = {};
 
-    Rachel.store.init = function () {
-        if (internals.store?.initialized) {
-            return Rachel;
-        }
+class _Rachel {
+    constructor() {
+        this.version = '1.0.0'
 
-        internals.store = {
-            initialized: true
-        };
+        this.events = new _RachelEventEmitter()
 
-        return Rachel;
+        console.log('[Success] _Rachel library successfully installed.')
     }
+}
 
-    Rachel.store.ensureStore = function () {
-        if (!internals.initialized) throw new Error('Rachel.js is not initialized. Please call Rachel() before using store.');
-        if (!internals.store || !internals.store.initialized) Rachel.store.init();
-    }
-
-    window.Rachel = Rachel;
-})();
+const R = new _Rachel()
 
 
-Rachel();
-Rachel.events.on('rachel.initialized', () => { console.log('[Succe1111ss] Rachel.js is ready to use') })
-
-Rachel.events.emit('rachel.initialized');
