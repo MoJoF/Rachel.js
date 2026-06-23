@@ -707,8 +707,6 @@ class _RachelDB {
 }
 
 
-
-
 class _Rachel {
     constructor() {
         this.version = '1.0.0'
