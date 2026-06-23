@@ -498,6 +498,212 @@ class _RSession {
     }
 }
 
+/*
+ * Модуль для работы с indexedDB
+ * open - открыть базу данных
+ * add - добавить запись в базу данных
+ * get - получить запись по ID
+ * getAll - получить записи в таблице
+ * update - обновить запись (наличие id в объекте value обязательно)
+ * patch - обновить запись частично
+ * delete - удалить запись
+ * clear - очистить таблицу
+ * exists - определение, существует ли запись в таблице
+ * count - определяем количество записей в таблице
+*/
+class _RachelDB {
+    static dbName = 'Rachel';
+    static db = null;
+
+    static async open(version = 2) {
+        if (this.db) return this.db;
+
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, version);
+
+            request.onupgradeneeded = () => {
+                // stores создаются динамически при первом использовании
+            };
+
+            request.onsuccess = () => {
+                this.db = request.result;
+                resolve(this.db);
+            };
+
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    static async __store(storeName, mode = 'readonly') {
+        if (!this.db) {
+            await this.open();
+        }
+
+        if (this.db.objectStoreNames.contains(storeName)) {
+            const tx = this.db.transaction(storeName, mode);
+            return tx.objectStore(storeName);
+        }
+
+        if (mode !== 'readwrite') {
+            throw new Error(`Store "${storeName}" does not exist`);
+        }
+
+        const oldVersion = this.db.version;
+        this.db.close();
+
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, oldVersion + 1);
+
+            request.onupgradeneeded = () => {
+                const db = request.result;
+
+                if (!db.objectStoreNames.contains(storeName)) {
+                    db.createObjectStore(storeName, {
+                        keyPath: 'id',
+                        autoIncrement: true
+                    });
+                }
+            };
+
+            request.onsuccess = () => {
+                this.db = request.result;
+                const tx = this.db.transaction(storeName, mode);
+                resolve(tx.objectStore(storeName));
+            };
+
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    static async add(store, value) {
+        const os = await this.__store(store, 'readwrite');
+
+        return new Promise((resolve, reject) => {
+            const req = os.add(value);
+
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    static async get(store, id) {
+        const os = await this.__store(store);
+
+        return new Promise((resolve, reject) => {
+            const req = os.get(id);
+
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    static async getAll(store) {
+        const os = await this.__store(store);
+
+        return new Promise((resolve, reject) => {
+            const req = os.getAll();
+
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    static async update(store, value) {
+        if (!value || value.id == null) {
+            throw new Error('Update requires an object with "id"');
+        }
+
+        const os = await this.__store(store, 'readwrite');
+
+        return new Promise((resolve, reject) => {
+            const getReq = os.get(value.id);
+
+            getReq.onsuccess = () => {
+                if (!getReq.result) {
+                    return reject(new Error(`Record with id ${value.id} not found`));
+                }
+
+                const req = os.put(value);
+
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            };
+
+            getReq.onerror = () => reject(getReq.error);
+        });
+    }
+
+    static async patch(store, id, changes) {
+        const os = await this.__store(store, 'readwrite');
+
+        return new Promise((resolve, reject) => {
+            const getReq = os.get(id);
+
+            getReq.onsuccess = () => {
+                const existing = getReq.result;
+
+                if (!existing) {
+                    return reject(new Error(`Record with id ${id} not found`));
+                }
+
+                const updated = { ...existing, ...changes, id };
+
+                const putReq = os.put(updated);
+
+                putReq.onsuccess = () => resolve(putReq.result);
+                putReq.onerror = () => reject(putReq.error);
+            };
+
+            getReq.onerror = () => reject(getReq.error);
+        });
+    }
+
+    static async delete(store, id) {
+        const os = await this.__store(store, 'readwrite');
+
+        return new Promise((resolve, reject) => {
+            const req = os.delete(id);
+
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    static async clear(store) {
+        const os = await this.__store(store, 'readwrite');
+
+        return new Promise((resolve, reject) => {
+            const req = os.clear();
+
+            req.onsuccess = () => resolve(true);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    static async exists(store, id) {
+        const os = await this.__store(store);
+
+        return new Promise((resolve, reject) => {
+            const req = os.get(id);
+
+            req.onsuccess = () => resolve(!!req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    static async count(store) {
+        const os = await this.__store(store);
+
+        return new Promise((resolve, reject) => {
+            const req = os.count();
+
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+    }
+}
+
+
 class _Rachel {
     constructor() {
         this.version = '1.0.0'
@@ -511,6 +717,12 @@ class _Rachel {
 
 const R = new _Rachel()
 
-document.addEventListener('DOMContentLoaded', () => R.store.__mount())
+async function init() {
+    await _RachelDB.open()
+    await _RachelDB.update('45444545', { name: "22122", id: 13, f: '1' })
+}
 
-console.log(_RLocal.set('1', 2).get(1))
+init()
+
+
+document.addEventListener('DOMContentLoaded', () => R.store.__mount())
