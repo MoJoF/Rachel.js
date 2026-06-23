@@ -6,7 +6,7 @@
  * Rachel DOM: .select, .create, .remove, .html, .text, .css, .attr, .on, .off, .append, .prepend, .replace, .clone, .show, .hide, .toggle
  * Rachel DOM Optimizations: .batch, .schedule, .lazy, .observe, .resize, .visible
  * Rachel HTTP: .get, .post, .put, .patch, .delete, .upload // ГОТОВО
- * Rachel Storage (localStorage): .set, .get, .remove, .clear 
+ * Rachel Storage (localStorage): .set, .get, .remove, .clear // ГОТОВО
  * Rachel Database (indexedDB): .open, .insert, .update, .delete, .findAll, .find 
  * Rachel FS (OPFS): .read, .write, .remove, .exists, .list, .mkdir, .move, .copy
  * Rachel Cache: .set, .get, .clear, .remove, .keys
@@ -153,14 +153,8 @@ class _RachelEventEmitter {
         this.history = {};
         return this;
     }
-
-    __listEvents() {
-        console.log('Listeners: ')
-        console.log(this.listeners)
-        console.log('History:')
-        console.log(this.history)
-    }
 }
+
 
 /*
  * r-model - записывает данные с input/textarea в состояние 
@@ -370,10 +364,10 @@ class _RachelStore {
     }
 }
 
+
 /*
  * Модуль для отправки HTTP-запросов на сервер
 */
-
 class _RachelHTTP {
     constructor(baseUrl = "") {
         this.baseUrl = baseUrl
@@ -430,6 +424,80 @@ class _RachelHTTP {
     }
 }
 
+/*
+ * Модуль для взаимодействия с localStorage
+ * get - получить значение по ключу
+ * set - создать ключ и значение
+ * remove - удалить пару ключ-значение
+ * clear - очистить хранилище
+*/
+class _RLocal {
+    static prefix = 'rachel:';
+
+    static __key(key) {
+        return this.prefix + key;
+    }
+
+    static set(key, value) {
+        localStorage.setItem(this.__key(key), JSON.stringify(value));
+        return this
+    }
+
+    static get(key) {
+        const value = localStorage.getItem(this.__key(key));
+        return value ? JSON.parse(value) : null;
+    }
+
+    static remove(key) {
+        localStorage.removeItem(this.__key(key));
+        return this
+    }
+
+    static clear() {
+        Object.keys(localStorage)
+            .filter(k => k.startsWith(this.prefix))
+            .forEach(k => localStorage.removeItem(k));
+        return this
+    }
+}
+
+/*
+ * Модуль для взаимодействия с sessionStorage
+ * get - получить значение по ключу
+ * set - создать ключ и значение
+ * remove - удалить пару ключ-значение
+ * clear - очистить хранилище
+*/
+class _RSession {
+    static prefix = 'rachel:';
+
+    static __key(key) {
+        return this.prefix + key;
+    }
+
+    static set(key, value) {
+        sessionStorage.setItem(this.__key(key), JSON.stringify(value));
+        return this
+    }
+
+    static get(key) {
+        const value = sessionStorage.getItem(this.__key(key));
+        return value ? JSON.parse(value) : null;
+    }
+
+    static remove(key) {
+        sessionStorage.removeItem(this.__key(key));
+        return this
+    }
+
+    static clear() {
+        Object.keys(sessionStorage)
+            .filter(k => k.startsWith(this.prefix))
+            .forEach(k => sessionStorage.removeItem(k));
+        return this
+    }
+}
+
 class _Rachel {
     constructor() {
         this.version = '1.0.0'
@@ -444,3 +512,5 @@ class _Rachel {
 const R = new _Rachel()
 
 document.addEventListener('DOMContentLoaded', () => R.store.__mount())
+
+console.log(_RLocal.set('1', 2).get(1))
