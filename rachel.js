@@ -7,7 +7,7 @@
  * Rachel DOM Optimizations: .batch, .schedule, .lazy, .observe, .resize, .visible
  * Rachel HTTP: .get, .post, .put, .patch, .delete, .upload // ГОТОВО
  * Rachel Storage (localStorage): .set, .get, .remove, .clear // ГОТОВО
- * Rachel Database (indexedDB): .open, .insert, .update, .delete, .findAll, .find 
+ * Rachel Database (indexedDB): .open, .insert, .update, .delete, .findAll, .find // ГОТОВО
  * Rachel FS (OPFS): .read, .write, .remove, .exists, .list, .mkdir, .move, .copy
  * Rachel Cache: .set, .get, .clear, .remove, .keys
  * Rachel Worker: .create, .destroy, .send, .on 
@@ -17,7 +17,7 @@
  * Rachel Media: .camera, .microphone, .audio, .video
  * Rachel Profiler: .start, .stop, .reset, .report (fps, memory, domUpdates, events, network, renders)
  * Rachel Compiler: .lexer, .parser 
- * Rachel Validate: .phone, .email
+ * Rachel Validate: .isPhone, .isEmail
  * Rachel Masks: .phone, .email, .date, .currency
  * Rachel Utils: .debounce, .throttle, .clone, .merge, .random, .uuid, .hash, .format, .parse
  * Rachel Animations: .animate, .transition, .keyframes
